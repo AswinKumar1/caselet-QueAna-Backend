@@ -166,7 +166,7 @@ exports.logRunningNotesEdit = async (req, res) => {
       question_id: question_id,
       question_no: question_no,
       type: "Notes Entered",
-      action: "User typed in the Notes box on Problem Context page",
+      action: "User typed comments in the Notes box",
       field_name: "notes",
       field_value: fieldValueStr,
       page: page || req.path,
