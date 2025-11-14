@@ -24,12 +24,26 @@ async function computeRelativeTime(exam_id, user_id, eventTimeUtc) {
     const firstStartLog = await UserlogModel.findOne({
       exam_id: exam_id,
       user_id: user_id,
-      type: "Start"
+      $or: [
+        { type: "Start" },  // Old format (legacy)
+        { type: "Button Clicked", action: "Start" },  // New format (short)
+        { type: "Button Clicked", action: "User clicked Start button" }  // New format (descriptive)
+      ],
+      eventTimeUtc: { $lte: eventTimeUtc }  // Only logs BEFORE current event
     })
     .sort({ eventTimeUtc: -1 })  // Earliest first
     .lean();
     
-    console.log("Found Start log:", firstStartLog);
+    if (firstStartLog) {
+      console.log("  Found Start log:", {
+        id: firstStartLog._id,
+        type: firstStartLog.type,
+        action: firstStartLog.action,
+        eventTimeUtc: firstStartLog.eventTimeUtc
+      });
+    } else {
+      console.log("  No Start log found");
+    }
     
     if (!firstStartLog || !firstStartLog.eventTimeUtc) {
       console.log(`No "Start" log found for user ${user_id} and exam ${exam_id}`);
@@ -51,7 +65,7 @@ async function computeRelativeTime(exam_id, user_id, eventTimeUtc) {
 
 exports.createLog = async (req, res, next) => {
   try {
-    console.log("LOG CREATE STARTED");
+    console.log("\n========== LOG CREATE STARTED ==========");
     
     const body = { ...req.body };
     
@@ -76,21 +90,29 @@ exports.createLog = async (req, res, next) => {
       
       // Truncate if too long (prevent DB errors)
       if (body.field_value.length > 1000) {
-        console.log(`runcating field_value from ${body.field_value.length} to 1000 chars`);
+        console.log(`Truncating field_value from ${body.field_value.length} to 1000 chars`);
         body.field_value = body.field_value.substring(0, 1000) + '...';
       }
     }
     
-    // Compute relative time from exam start
-    body.relativeTimeSec = await computeRelativeTime(
-      body.exam_id, 
-      body.user_id,
-      nowUtc
-    );
+    const isStartLog = body.type === "Start" || 
+                       (body.type === "Button Clicked" && body.action === "Start") ||
+                       (body.type === "Button Clicked" && body.action === "User clicked Start button");
     
-    // Special case: if this IS the "Start" log, relative time should be 0
-    if (body.type === "Start") {
+    if (isStartLog) {
       body.relativeTimeSec = 0;
+      console.log("This is a Start log - setting relativeTimeSec to 0");
+    } else {
+      // Compute relative time from most recent exam start
+      body.relativeTimeSec = await computeRelativeTime(
+        body.exam_id, 
+        body.user_id,
+        nowUtc
+      );
+      
+      if (body.relativeTimeSec === null) {
+        console.log("Could not compute relative time (no Start log found)");
+      }
     }
     
     // Validate required fields
