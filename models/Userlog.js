@@ -12,8 +12,8 @@ const userLogSchema = new Schema(
     question_id: {
       type: mongoose.Types.ObjectId,
       ref: 'Question',
-      default: null,      // ✅ Allow null
-      required: false     // ✅ Not required
+      default: null,      
+      required: false     
     },
     question_no: {
       type: Number,
@@ -38,6 +38,7 @@ const userLogSchema = new Schema(
         "Login",
         "Pre-Reflection",
         "Post-Reflection",
+        "Answer Post-Reflection Prompt",
         "Post-Reflection-Per-Question",
         "Confidence",
         "Answer Option",
@@ -104,8 +105,3 @@ userLogSchema.index({ eventTimeUtc: 1 });
 
 const UserlogModel = mongoose.model("user_log", userLogSchema);
 module.exports = UserlogModel;
-
-
-
-//Navigation : From, to with timestamp (User_id, practice_id, )
-//Page Activity: User Input, Input field name, input field value
