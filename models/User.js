@@ -18,6 +18,11 @@ const userSchema = new Schema({
     ref: 'scheduledExam', 
     default: null 
   },
+  domain_tag: {  // Add domain tag
+    type: String,
+    enum: ['umbc', 'other'],
+    default: 'other'
+  },
 });
 
 const User = mongoose.model("users", userSchema);

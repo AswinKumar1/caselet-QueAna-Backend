@@ -11,7 +11,6 @@ const saltRounds = 10;
 
 // POST '/auth/signup'
 exports.signUpController = (req, res, next) => {
-  // 2 - Destructure the password and username
   console.log("Req body backend:", req.body);
   const { username, password, full_name, practiceId } = req.body;
 
@@ -21,7 +20,6 @@ exports.signUpController = (req, res, next) => {
     return res.status(200).json({ success: false });
   }
 
-  // 3 - Check if the username and password are empty strings
   if (username === "" || password === "" || full_name == "") {
     return res.status(401).json({
       success: false,
@@ -30,11 +28,8 @@ exports.signUpController = (req, res, next) => {
     return;
   }
 
-  // 4 - Check if the username already exists - if so send error
-
   User.findOne({ username })
     .then((user) => {
-      // > If username exists already send the error
       if (user) {
         res.status(401).json({
           successMessage: false,
@@ -43,16 +38,19 @@ exports.signUpController = (req, res, next) => {
         return;
       }
 
-      // > If username doesn't exist, generate salts and hash the password
       console.log("BUG BELOW HERE");
       const salt = bcrypt.genSaltSync(saltRounds);
       const hashedPassword = bcrypt.hashSync(password, salt);
+
+      // Determine domain tag
+      const domain_tag = exports.determineOrganizationTag(username);
 
       const userObj = {
         username,
         password: hashedPassword,
         full_name,
         currentPracticeId: practiceId || null,
+        domain_tag: domain_tag, // Store in database
       };
 
       console.log("Object being passed to User.create:", userObj);
@@ -65,12 +63,11 @@ exports.signUpController = (req, res, next) => {
             email: newUserObj.username,
             full_name: newUserObj.full_name,
             username: newUserObj.username,
+            domain_tag: newUserObj.domain_tag,
             date: new Date(),
           };
 
           const token = jwt.sign(data, jwtSecretKey);
-          // save user token
-
           res.json({ succes: true, token: token});
         })
         .catch((err) => {
@@ -80,12 +77,9 @@ exports.signUpController = (req, res, next) => {
             errorMessage: err,
           });
         });
-
-      // > Once the user is created , redirect to home
     })
     .catch((err) => console.log(err));
 };
-
 exports.updatePracticeId = async (req, res) => {
   const { userId, practiceId } = req.body;
 
@@ -174,6 +168,7 @@ exports.loginController = async (req, res, next) => {
       full_name: userData.full_name,
       username: userData.username,
       currentPracticeId: userData.currentPracticeId,
+      domain_tag: userData.domain_tag, //add domain tag
       date: new Date(),
     };
 
@@ -266,4 +261,15 @@ exports.protected = (req, res, next) => {
       successMessage: false,
     });
   }
+};
+
+// Helper function to determine organization tag based on username
+exports.determineOrganizationTag = (username) => {
+  if (!username) return "other";
+  
+  const usernameLower = username.toLowerCase();
+  if (usernameLower.endsWith("@umbc.edu")) {
+    return "umbc";
+  }
+  return "other";
 };
