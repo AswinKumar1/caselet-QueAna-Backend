@@ -1,3 +1,4 @@
+// backend/controllers/authentication.js
 var express = require("express");
 const User = require("./../models/User");
 var router = express.Router();
@@ -9,9 +10,35 @@ const bcrypt = require("bcrypt");
 // 1 - Specify how many salt rounds
 const saltRounds = 10;
 
+// List of admin/research analyst emails
+const ADMIN_EMAILS = [
+  "maryam@umbc.edu",
+  "demo123@gmail.com",
+  // Add other research analyst emails
+];
+
+// Helper function to determine organization tag based on username
+exports.determineOrganizationTag = (username, isAdmin = false) => {
+  if (!username) return "other";
+  
+  const usernameLower = username.toLowerCase();
+  
+  // Check if this is an admin/research analyst
+  if (isAdmin || ADMIN_EMAILS.includes(usernameLower)) {
+    return "admin";
+  }
+  
+  // UMBC users
+  if (usernameLower.endsWith("@umbc.edu")) {
+    return "umbc";
+  }
+  
+  // Everyone else (UCF and others)
+  return "other";
+};
+
 // POST '/auth/signup'
 exports.signUpController = (req, res, next) => {
-  // 2 - Destructure the password and username
   console.log("Req body backend:", req.body);
   const { username, password, full_name, practiceId } = req.body;
 
@@ -21,20 +48,15 @@ exports.signUpController = (req, res, next) => {
     return res.status(200).json({ success: false });
   }
 
-  // 3 - Check if the username and password are empty strings
   if (username === "" || password === "" || full_name == "") {
     return res.status(401).json({
       success: false,
       errorMessage: "Username and password not found!",
     });
-    return;
   }
-
-  // 4 - Check if the username already exists - if so send error
 
   User.findOne({ username })
     .then((user) => {
-      // > If username exists already send the error
       if (user) {
         res.status(401).json({
           successMessage: false,
@@ -43,16 +65,23 @@ exports.signUpController = (req, res, next) => {
         return;
       }
 
-      // > If username doesn't exist, generate salts and hash the password
-      console.log("BUG BELOW HERE");
+      console.log("Hashing password...");
       const salt = bcrypt.genSaltSync(saltRounds);
       const hashedPassword = bcrypt.hashSync(password, salt);
+
+      // Check if this user should be an admin
+      const isAdmin = ADMIN_EMAILS.includes(username.toLowerCase());
+      
+      // Determine domain tag
+      const domain_tag = exports.determineOrganizationTag(username, isAdmin);
 
       const userObj = {
         username,
         password: hashedPassword,
         full_name,
         currentPracticeId: practiceId || null,
+        domain_tag: domain_tag,
+        admin: isAdmin,  // Set admin flag
       };
 
       console.log("Object being passed to User.create:", userObj);
@@ -65,13 +94,13 @@ exports.signUpController = (req, res, next) => {
             email: newUserObj.username,
             full_name: newUserObj.full_name,
             username: newUserObj.username,
+            domain_tag: newUserObj.domain_tag,
+            admin: newUserObj.admin,
             date: new Date(),
           };
 
           const token = jwt.sign(data, jwtSecretKey);
-          // save user token
-
-          res.json({ succes: true, token: token});
+          res.json({ success: true, token: token });
         })
         .catch((err) => {
           console.log(err);
@@ -80,8 +109,6 @@ exports.signUpController = (req, res, next) => {
             errorMessage: err,
           });
         });
-
-      // > Once the user is created , redirect to home
     })
     .catch((err) => console.log(err));
 };
@@ -99,7 +126,7 @@ exports.updatePracticeId = async (req, res) => {
       return res.status(404).json({ success: false, errorMessage: "User not found." });
     }
 
-    user.currentPracticeId = practiceId || null; // Update or clear the practiceId
+    user.currentPracticeId = practiceId || null;
     await user.save();
 
     res.status(200).json({ success: true, message: "Practice ID updated successfully." });
@@ -109,15 +136,12 @@ exports.updatePracticeId = async (req, res) => {
   }
 };
 
-
-
 exports.getUserInfo = async (req, res, next) => {
   const user = await User.find({ _id: req.query.user_id });
   if (!user) {
     return res.status(404).json({ success: false, message: "User not found." });
   }
 
-  // return res.status(200).json({ success: true, user: user[0] });
   return res.status(200).json({
     success: true,
     user: {
@@ -125,16 +149,17 @@ exports.getUserInfo = async (req, res, next) => {
       username: user[0].username,
       email: user[0].email,
       full_name: user[0].full_name,
-      currentPracticeId: user[0].currentPracticeId, // Include the current practice ID
+      currentPracticeId: user[0].currentPracticeId,
+      domain_tag: user[0].domain_tag,  // Include domain tag
+      admin: user[0].admin,  // Include admin status
     }
-  })
+  });
 };
+
 // POST 'auth/login'
 exports.loginController = async (req, res, next) => {
-  // Deconstruct the password and the user
   const { username, password: enteredPassword, practiceId } = req.body;
 
-  // Check if username or password are empty strings
   if (username === "" || enteredPassword === "") {
     return res.status(401).json({
       success: false,
@@ -153,19 +178,17 @@ exports.loginController = async (req, res, next) => {
   }
 
   let userData = user_list[0];
-  const hashedPasswordFromDB = userData.password; // Hashed password saved in DB during signup
+  const hashedPasswordFromDB = userData.password;
 
   const passwordCorrect = bcrypt.compareSync(
     enteredPassword,
     hashedPasswordFromDB
   );
-  // If password is correct - create session (& cookie) and redirect
+
   if (passwordCorrect) {
-    // Save the login in the session ( and create cookie )
-    // And redirect the user
-      console.log("Saving practiceId to the user:", practiceId);
-      userData.currentPracticeId = practiceId;
-      await userData.save();
+    console.log("Saving practiceId to the user:", practiceId);
+    userData.currentPracticeId = practiceId;
+    await userData.save();
 
     let jwtSecretKey = process.env.SESSION_SECRET;
     let data = {
@@ -174,15 +197,23 @@ exports.loginController = async (req, res, next) => {
       full_name: userData.full_name,
       username: userData.username,
       currentPracticeId: userData.currentPracticeId,
+      domain_tag: userData.domain_tag,
+      admin: userData.admin,
       date: new Date(),
     };
 
-
     const token = jwt.sign(data, jwtSecretKey);
-    // save user token
 
-    return res.json({ success: true, token: token, username: data.username, 
-                      full_name: data.full_name, user_id: data.user_id, currentPracticeId: data.currentPracticeId, });
+    return res.json({ 
+      success: true, 
+      token: token, 
+      username: data.username, 
+      full_name: data.full_name, 
+      user_id: data.user_id, 
+      currentPracticeId: data.currentPracticeId,
+      domain_tag: data.domain_tag,
+      admin: data.admin,
+    });
   } else {
     return res.status(401).json({
       success: false,
@@ -191,7 +222,7 @@ exports.loginController = async (req, res, next) => {
   }
 };
 
-//POST 'auth/reset-password'
+// POST 'auth/reset-password'
 exports.resetPasswordController = async (req, res, next) => {
   const { identifier, new_password } = req.body;
 
@@ -200,7 +231,6 @@ exports.resetPasswordController = async (req, res, next) => {
   }
 
   try {
-    // Find the user by either email or username
     const user = await User.findOne({
       $or: [{ email: identifier }, { username: identifier }],
     });
@@ -209,7 +239,6 @@ exports.resetPasswordController = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
-    // Hash the new password and save it
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(new_password, salt);
 
@@ -223,7 +252,7 @@ exports.resetPasswordController = async (req, res, next) => {
 };
 
 exports.getPracticeIdController = async (req, res, next) => {
-  const { userId } = req.query; // Expecting userId as a query parameter
+  const { userId } = req.query;
 
   if (!userId) {
     return res.status(400).json({
@@ -254,9 +283,7 @@ exports.getPracticeIdController = async (req, res, next) => {
   }
 };
 
-
-
-//Check if user is logged in
+// Check if user is logged in
 exports.protected = (req, res, next) => {
   if (req.session.currentUser) {
     next();
