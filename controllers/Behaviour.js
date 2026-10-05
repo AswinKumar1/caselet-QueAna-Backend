@@ -6,8 +6,8 @@ const BEHAVIOUR_FIELDS = ["exam_id",
   "pre_reflection.frequency",
   "pre_reflection.competence",
   "pre_reflection.skills",
-  "pre_reflection.mobilization",
-  "pre_reflection.isolation",
+  // "pre_reflection.mobilization",
+  // "pre_reflection.isolation",
   "pre_reflection.relevance",
 ];
 
@@ -174,7 +174,7 @@ exports.updateBehaviour = async (req, res, next) => {
 
     // Update behaviour document based on behaviour_id
     const updatedBehaviour = await BehaviourModel.updateOne(
-      { _id: Types.ObjectId(behaviour_id) },  // Match by behaviour_id
+      { _id: new Types.ObjectId(behaviour_id) },  // Match by behaviour_id
       { $set: updateFields }  // Set the fields that need updating
     );
 
@@ -183,7 +183,7 @@ exports.updateBehaviour = async (req, res, next) => {
 
 
     // Check if any document was modified
-    if (updatedBehaviour.nModified > 0) {
+    if (updatedBehaviour.modifiedCount > 0) {
       const updatedBehaviourData = await BehaviourModel.findById(behaviour_id);
       return res.status(200).json({
         success: true,
@@ -216,8 +216,8 @@ exports.deleteUserBehaviour = async (req, res, next) => {
 
     // Delete Behaviour entries for the user and exam
     await BehaviourModel.deleteMany({
-      exam_id: Types.ObjectId(examId),
-      user_id: Types.ObjectId(userId),
+      exam_id: new Types.ObjectId(examId),
+      user_id: new Types.ObjectId(userId),
     });
 
     return res.status(200).json({
@@ -261,8 +261,8 @@ exports.saveRunningNotes = async (req, res) => {
     const updatedBehaviour = await BehaviourModel.findOneAndUpdate( 
      {
         // match on both exam and user
-        exam_id: Types.ObjectId(exam_id),
-        user_id: Types.ObjectId(userId),
+        exam_id: new Types.ObjectId(exam_id),
+        user_id: new Types.ObjectId(userId),
       },
       {
         $set: { running_notes },
