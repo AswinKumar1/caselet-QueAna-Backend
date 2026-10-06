@@ -1,7 +1,7 @@
 const { Types } = require("mongoose");
 const { fetchUserIdFromToken } = require("../middleware/auth_validate");
 const BehaviourModel = require("../models/Behaviour");
-const BEHAVIOUR_FIELDS = ["exam_id", 
+const BEHAVIOUR_FIELDS = ["exam_id",
   "pre_reflection.familiarity",
   "pre_reflection.frequency",
   "pre_reflection.competence",
@@ -162,7 +162,7 @@ exports.updateBehaviour = async (req, res, next) => {
       is_task_submitted: req.body.is_task_submitted,
       is_post_reflection_submitted: req.body.is_post_reflection_submitted,  // New field for post-reflection submission
 
-    
+
     };
 
     // Remove undefined fields (if any field is not provided in the body)
@@ -181,9 +181,11 @@ exports.updateBehaviour = async (req, res, next) => {
     console.log("Update Fields: ", updateFields);  // Check if is_task_submitted is present here
     console.log("Updated Behaviour Result:", updatedBehaviour);
 
-
-    // Check if any document was modified
-    if (updatedBehaviour.modifiedCount > 0) {
+    // Check whether a document was FOUND, not whether anything actually changed.
+    // (modifiedCount is 0 whenever the new value already matches what's stored —
+    // e.g. is_task_submitted is already true from a prior attempt — which is not
+    // an error condition and should still report success.)
+    if (updatedBehaviour.matchedCount > 0) {
       const updatedBehaviourData = await BehaviourModel.findById(behaviour_id);
       return res.status(200).json({
         success: true,
@@ -191,7 +193,7 @@ exports.updateBehaviour = async (req, res, next) => {
         updatedBehaviour: updatedBehaviourData
       });
     } else {
-      return res.status(400).json({ success: false, message: "No behaviour found or updated" });
+      return res.status(404).json({ success: false, message: "Behaviour not found" });
     }
   } catch (error) {
     console.error("Error updating behaviour: ", error);
@@ -258,7 +260,7 @@ exports.saveRunningNotes = async (req, res) => {
     }
 
     // 3️⃣ Find this user’s behaviour doc
-    const updatedBehaviour = await BehaviourModel.findOneAndUpdate( 
+    const updatedBehaviour = await BehaviourModel.findOneAndUpdate(
      {
         // match on both exam and user
         exam_id: new Types.ObjectId(exam_id),
@@ -272,7 +274,7 @@ exports.saveRunningNotes = async (req, res) => {
         upsert: true, // create if not found
       }
     );
-        
+
     console.log("Current value of running notes: ", updatedBehaviour.running_notes);
 
     // 4️⃣ Reply
@@ -288,5 +290,3 @@ exports.saveRunningNotes = async (req, res) => {
       .json({ success: false, message: "Internal Server Error" });
   }
 };
-
-
